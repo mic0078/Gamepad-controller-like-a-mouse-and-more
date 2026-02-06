@@ -1,24 +1,24 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# === UKRYCIE KONSOLI POWERSHELL ===
+# === HIDE POWERSHELL CONSOLE ===
 Add-Type -Name Win32 -Namespace ControllerGUI -MemberDefinition @'
 [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 '@ -ErrorAction SilentlyContinue
 
-# Ukryj okno konsoli
+# Hide console window
 try { [ControllerGUI.Win32]::ShowWindow([ControllerGUI.Win32]::GetConsoleWindow(), 0) | Out-Null } catch {}
 
-# === KONFIGURACJA DOMYŚLNA ===
+# === DEFAULT CONFIGURATION ===
 $global:Config = @{
-    # Czułość
+    # Sensitivity
     CursorSpeed = 8
     ScrollSpeed = 300
     Deadzone = 10000
-    SwapSticks = $false  # False = Lewy:Kursor/Prawy:Scroll, True = Lewy:Scroll/Prawy:Kursor
+    SwapSticks = $false  # False = Left:Cursor/Right:Scroll, True = Left:Scroll/Right:Cursor
     
-    # Przypisania przycisków
+    # Button mappings
     ButtonA = "LeftClick"
     ButtonB = "RightClick"
     ButtonX = "ShowDesktop"
@@ -37,8 +37,8 @@ $global:Config = @{
     RightTrigger = "None"
 }
 
-# === ŚCIEŻKA KONFIGURACJI (użyj ścieżki skryptu) ===
-# Użyj $PSScriptRoot gdy skrypt jest uruchamiany z pliku, w przeciwnym razie wyciągnij ścieżkę z MyInvocation
+# === CONFIG PATH (use script folder for portability) ===
+# Use $PSCommandPath when run from file, otherwise try $PSScriptRoot or MyInvocation
 if ($PSCommandPath) {
     $global:ScriptDir = Split-Path -Parent $PSCommandPath
 } elseif ($PSScriptRoot) {
@@ -46,67 +46,64 @@ if ($PSCommandPath) {
 } else {
     $global:ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 }
-# Ustaw ścieżkę do pliku konfiguracji w katalogu, z którego pochodzi skrypt
-$global:ConfigPath = Join-Path $global:ScriptDir "ControllerConfig.json"
+# Default config path (may be overridden by optional installer block below)
+$global:ConfigPath = Join-Path $global:ScriptDir 'ControllerConfig.json'
 
-# === OPCJONALNA INSTALACJA DO STAŁEGO KATALOGU ===
-# Jeśli użytkownik chce, skrypt utworzy folder instalacyjny i skopiuje sam siebie tam,
-# a plik konfiguracji będzie zapisywany w tym katalogu.
+# === OPTIONAL INSTALL TO A FIXED DIRECTORY ===
+# If user wants, the script will create an install folder and copy itself there,
+# and the config file will be stored in that folder.
 $installDir = "C:\Controller_Configurator"
 try {
     if (-not (Test-Path $installDir)) {
         New-Item -Path $installDir -ItemType Directory -Force | Out-Null
-        Write-Host "ℹ Utworzono katalog instalacyjny: $installDir" -ForegroundColor Cyan
+        Write-Host "ℹ Created install directory: $installDir" -ForegroundColor Cyan
     }
 
-    # Ścieżka do aktualnego pliku skryptu
     if ($PSCommandPath) { $currentScriptFile = $PSCommandPath } else { $currentScriptFile = $MyInvocation.MyCommand.Definition }
     $destScript = Join-Path $installDir (Split-Path -Leaf $currentScriptFile)
 
     if ($currentScriptFile -and ($currentScriptFile -ne $destScript)) {
         try {
             Copy-Item -Path $currentScriptFile -Destination $destScript -Force -ErrorAction Stop
-            Write-Host "ℹ Skopiowano skrypt do: $destScript" -ForegroundColor Cyan
+            Write-Host "ℹ Copied script to: $destScript" -ForegroundColor Cyan
         } catch {
-            # Użyj ${installDir} aby uniknąć problemów z interpolacją i wypisz wyjątek jako osobny argument
-            Write-Host "⚠ Nie udało się skopiować skryptu do ${installDir}:" -ForegroundColor Yellow
+            Write-Host "⚠ Failed to copy script to ${installDir}:" -ForegroundColor Yellow
             Write-Host $_ -ForegroundColor Yellow
         }
     }
 
-    # Zapisuj konfigurację w katalogu instalacyjnym (nadpisze wcześniejsze ustawienie)
+    # Store config in install dir (override)
     $global:ScriptDir = $installDir
-    $global:ConfigPath = Join-Path $global:ScriptDir "ControllerConfig.json"
+    $global:ConfigPath = Join-Path $global:ScriptDir 'ControllerConfig.json'
 } catch {
-    Write-Host "✗ Błąd podczas przygotowywania katalogu instalacyjnego: $_" -ForegroundColor Red
+    Write-Host "✗ Error preparing install directory: $_" -ForegroundColor Red
 }
 
-# === FUNKCJE WINDOWS DOSTĘPNE DO PRZYPISANIA ===
+# === AVAILABLE ACTIONS FOR BUTTON ASSIGNMENT ===
 $global:AvailableFunctions = [ordered]@{
-    # === BRAK AKCJI ===
-    "None" = "───────────  BRAK AKCJI  ───────────"
+    "None" = "───────────  NO ACTION  ───────────"
     
-    # === MYSZ ===
-    "LeftClick" = "🖱️ Lewy przycisk myszy"
-    "RightClick" = "🖱️ Prawy przycisk myszy"
-    "MiddleClick" = "🖱️ Środkowy przycisk myszy"
-    "DoubleClick" = "🖱️ Podwójne kliknięcie"
+    # MOUSE
+    "LeftClick" = "🖱️ Left mouse button"
+    "RightClick" = "🖱️ Right mouse button"
+    "MiddleClick" = "🖱️ Middle mouse button"
+    "DoubleClick" = "🖱️ Double click"
     
-    # === PODSTAWOWE KLAWISZE ===
+    # BASIC KEYS
     "Enter" = "⏎ Enter"
     "Escape" = "⎋ Escape"
     "Tab" = "⇥ Tab"
-    "Space" = "␣ Spacja"
+    "Space" = "␣ Space"
     "Backspace" = "⌫ Backspace"
     "Delete" = "⌦ Delete"
     
-    # === STRZAŁKI ===
-    "Key_Up" = "↑ Strzałka w górę"
-    "Key_Down" = "↓ Strzałka w dół"
-    "Key_Left" = "← Strzałka w lewo"
-    "Key_Right" = "→ Strzałka w prawo"
+    # ARROWS
+    "Key_Up" = "↑ Arrow Up"
+    "Key_Down" = "↓ Arrow Down"
+    "Key_Left" = "← Arrow Left"
+    "Key_Right" = "→ Arrow Right"
     
-    # === LITERY A-Z ===
+    # LETTERS A-Z
     "Key_A" = "🔤 A"
     "Key_B" = "🔤 B"
     "Key_C" = "🔤 C"
@@ -134,7 +131,7 @@ $global:AvailableFunctions = [ordered]@{
     "Key_Y" = "🔤 Y"
     "Key_Z" = "🔤 Z"
     
-    # === CYFRY 0-9 ===
+    # DIGITS 0-9
     "Key_0" = "🔢 0"
     "Key_1" = "🔢 1"
     "Key_2" = "🔢 2"
@@ -146,7 +143,7 @@ $global:AvailableFunctions = [ordered]@{
     "Key_8" = "🔢 8"
     "Key_9" = "🔢 9"
     
-    # === KLAWISZE FUNKCYJNE F1-F12 ===
+    # FUNCTION KEYS F1-F12
     "Key_F1" = "⌨️ F1"
     "Key_F2" = "⌨️ F2"
     "Key_F3" = "⌨️ F3"
@@ -160,31 +157,31 @@ $global:AvailableFunctions = [ordered]@{
     "Key_F11" = "⌨️ F11"
     "Key_F12" = "⌨️ F12"
     
-    # === MODYFIKATORY ===
-    "Key_LShift" = "⇧ Lewy Shift"
-    "Key_RShift" = "⇧ Prawy Shift"
-    "Key_LControl" = "⌃ Lewy Control"
-    "Key_RControl" = "⌃ Prawy Control"
-    "Key_LAlt" = "⎇ Lewy Alt"
-    "Key_RAlt" = "⎇ Prawy Alt"
-    "Key_LWin" = "⊞ Lewy Win"
-    "Key_RWin" = "⊞ Prawy Win"
+    # MODIFIERS
+    "Key_LShift" = "⇧ Left Shift"
+    "Key_RShift" = "⇧ Right Shift"
+    "Key_LControl" = "⌃ Left Control"
+    "Key_RControl" = "⌃ Right Control"
+    "Key_LAlt" = "⎇ Left Alt"
+    "Key_RAlt" = "⎇ Right Alt"
+    "Key_LWin" = "⊞ Left Win"
+    "Key_RWin" = "⊞ Right Win"
     
-    # === NAWIGACJA ===
+    # NAVIGATION
     "Key_Home" = "⇱ Home"
     "Key_End" = "⇲ End"
     "Key_PageUp" = "⇞ Page Up"
     "Key_PageDown" = "⇟ Page Down"
     "Key_Insert" = "⎀ Insert"
     
-    # === KLAWISZE BLOKUJĄCE ===
+    # LOCK KEYS
     "Key_CapsLock" = "⇪ Caps Lock"
     "Key_NumLock" = "⇭ Num Lock"
     "Key_ScrollLock" = "⤓ Scroll Lock"
     "Key_Pause" = "⎉ Pause/Break"
     "Key_PrintScreen" = "🖨️ Print Screen"
     
-    # === NUMPAD 0-9 ===
+    # NUMPAD 0-9
     "Key_Numpad0" = "🔢 Numpad 0"
     "Key_Numpad1" = "🔢 Numpad 1"
     "Key_Numpad2" = "🔢 Numpad 2"
@@ -196,7 +193,7 @@ $global:AvailableFunctions = [ordered]@{
     "Key_Numpad8" = "🔢 Numpad 8"
     "Key_Numpad9" = "🔢 Numpad 9"
     
-    # === NUMPAD OPERACJE ===
+    # NUMPAD OPERATIONS
     "Key_NumpadAdd" = "➕ Numpad +"
     "Key_NumpadSubtract" = "➖ Numpad -"
     "Key_NumpadMultiply" = "✖️ Numpad *"
@@ -204,65 +201,65 @@ $global:AvailableFunctions = [ordered]@{
     "Key_NumpadDecimal" = "◦ Numpad ."
     "Key_NumpadEnter" = "⏎ Numpad Enter"
     
-    # === ZNAKI SPECJALNE ===
-    "Key_Semicolon" = '; Średnik'
-    "Key_Equals" = '= Równa się'
-    "Key_Comma" = ', Przecinek'
+    # SPECIAL CHARACTERS
+    "Key_Semicolon" = '; Semicolon'
+    "Key_Equals" = '= Equals'
+    "Key_Comma" = ', Comma'
     "Key_Minus" = '- Minus'
-    "Key_Period" = '. Kropka'
+    "Key_Period" = '. Period'
     "Key_Slash" = '/ Slash'
-    "Key_Backquote" = '` Tylda/Backtick'
-    "Key_LeftBracket" = '[ Lewy nawias'
-    "Key_Backslash" = '\ Backslash'
-    "Key_RightBracket" = '] Prawy nawias'
-    "Key_Quote" = "' Apostrof"
+    "Key_Backquote" = '` Tilde/Backtick'
+    "Key_LeftBracket" = '[ Left bracket'
+    "Key_Backslash" = '\\ Backslash'
+    "Key_RightBracket" = '] Right bracket'
+    "Key_Quote" = "' Apostrophe"
     
-    # === SKRÓTY EDYCJI ===
-    "Copy" = "📋 Kopiuj (Ctrl+C)"
-    "Paste" = "📋 Wklej (Ctrl+V)"
-    "Cut" = "✂️ Wytnij (Ctrl+X)"
-    "Undo" = "↶ Cofnij (Ctrl+Z)"
-    "Redo" = "↷ Ponów (Ctrl+Y)"
-    "SelectAll" = "📄 Zaznacz wszystko (Ctrl+A)"
-    "Save" = "💾 Zapisz (Ctrl+S)"
-    "Find" = "🔍 Znajdź (Ctrl+F)"
+    # EDIT SHORTCUTS
+    "Copy" = "📋 Copy (Ctrl+C)"
+    "Paste" = "📋 Paste (Ctrl+V)"
+    "Cut" = "✂️ Cut (Ctrl+X)"
+    "Undo" = "↶ Undo (Ctrl+Z)"
+    "Redo" = "↷ Redo (Ctrl+Y)"
+    "SelectAll" = "📄 Select All (Ctrl+A)"
+    "Save" = "💾 Save (Ctrl+S)"
+    "Find" = "🔍 Find (Ctrl+F)"
     
-    # === SKRÓTY WINDOWS ===
-    "StartMenu" = "⊞ Menu Start"
-    "ShowDesktop" = "🖥️ Pokaż pulpit (Win+D)"
-    "TaskView" = "🗔 Widok zadań (Win+Tab)"
-    "AltTab" = "⇄ Przełącz okna (Alt+Tab)"
-    "CloseWindow" = "✖️ Zamknij okno (Alt+F4)"
-    "MinimizeAll" = "🗕 Minimalizuj wszystko (Win+M)"
-    "Explorer" = "📁 Eksplorator (Win+E)"
-    "Run" = "▶️ Uruchom (Win+R)"
-    "Screenshot" = "📸 Zrzut ekranu (Win+Shift+S)"
-    "LockPC" = "🔒 Zablokuj PC (Win+L)"
-    "Refresh" = "🔄 Odśwież (F5)"
+    # WINDOWS SHORTCUTS
+    "StartMenu" = "⊞ Start Menu"
+    "ShowDesktop" = "🖥️ Show Desktop (Win+D)"
+    "TaskView" = "🗔 Task View (Win+Tab)"
+    "AltTab" = "⇄ Switch Windows (Alt+Tab)"
+    "CloseWindow" = "✖️ Close Window (Alt+F4)"
+    "MinimizeAll" = "🗕 Minimize All (Win+M)"
+    "Explorer" = "📁 Explorer (Win+E)"
+    "Run" = "▶️ Run (Win+R)"
+    "Screenshot" = "📸 Screenshot (Win+Shift+S)"
+    "LockPC" = "🔒 Lock PC (Win+L)"
+    "Refresh" = "🔄 Refresh (F5)"
     
-    # === MULTIMEDIA ===
-    "VolumeUp" = "🔊 Głośność +"
-    "VolumeDown" = "🔉 Głośność -"
-    "VolumeMute" = "🔇 Wycisz"
-    "MediaPlay" = "⏯️ Odtwórz/Pauza"
-    "MediaNext" = "⏭️ Następny utwór"
-    "MediaPrevious" = "⏮️ Poprzedni utwór"
+    # MULTIMEDIA
+    "VolumeUp" = "🔊 Volume +"
+    "VolumeDown" = "🔉 Volume -"
+    "VolumeMute" = "🔇 Mute"
+    "MediaPlay" = "⏯️ Play/Pause"
+    "MediaNext" = "⏭️ Next track"
+    "MediaPrevious" = "⏮️ Previous track"
     
-    # === PRZEGLĄDARKA ===
-    "OpenBrowser" = "🌐 Otwórz przeglądarkę"
-    "BrowserBack" = "◀️ Wstecz (przeglądarka)"
-    "BrowserForward" = "▶️ Do przodu (przeglądarka)"
-    "SeekBack5s" = "⏪ Przewiń -5s"
-    "SeekForward5s" = "⏩ Przewiń +5s"
+    # BROWSER
+    "OpenBrowser" = "🌐 Open browser"
+    "BrowserBack" = "◀️ Browser Back"
+    "BrowserForward" = "▶️ Browser Forward"
+    "SeekBack5s" = "⏪ Seek -5s"
+    "SeekForward5s" = "⏩ Seek +5s"
     
-    # === INNE ===
-    "OpenEmail" = "✉️ Otwórz klienta poczty"
+    # OTHER
+    "OpenEmail" = "✉️ Open email client"
     
-    # === WYJŚCIE ===
-    "Exit" = "🚪 Wyjście ze skryptu"
+    # EXIT
+    "Exit" = "🚪 Exit script"
 }
 
-# === FUNKCJE POMOCNICZE ===
+# === HELPER FUNCTIONS ===
 function Load-Config {
     if (Test-Path $global:ConfigPath) {
         try {
@@ -270,19 +267,18 @@ function Load-Config {
             foreach ($key in $json.PSObject.Properties.Name) {
                 $global:Config[$key] = $json.$key
             }
-            Write-Host "✓ Konfiguracja wczytana: $global:ConfigPath" -ForegroundColor Green
-        }
-        catch {
-            Write-Host "⚠ Błąd wczytywania konfiguracji, używam domyślnej" -ForegroundColor Yellow
+            Write-Host "✓ Configuration loaded: $global:ConfigPath" -ForegroundColor Green
+        } catch {
+            Write-Host "⚠ Error loading configuration, using defaults" -ForegroundColor Yellow
         }
     }
     else {
-        # Jeśli plik nie istnieje — utwórz go od razu z domyślną konfiguracją
+        # If config file doesn't exist - create it immediately with defaults
         try {
             $global:Config | ConvertTo-Json | Set-Content -Path $global:ConfigPath -Encoding UTF8
-            Write-Host "ℹ Utworzono domyślny plik konfiguracji: $global:ConfigPath" -ForegroundColor Cyan
+            Write-Host "ℹ Created default configuration file: $global:ConfigPath" -ForegroundColor Cyan
         } catch {
-            Write-Host "✗ Nie udało się utworzyć pliku konfiguracji: $global:ConfigPath`n  $_" -ForegroundColor Red
+            Write-Host "✗ Failed to create configuration file: $global:ConfigPath`n  $_" -ForegroundColor Red
         }
     }
 }
@@ -294,28 +290,28 @@ function Save-Config {
         $global:Config | ConvertTo-Json | Set-Content $global:ConfigPath
         
         if ($StatusLabel) {
-            $StatusLabel.Text = "✓ Konfiguracja zapisana pomyślnie!"
+            $StatusLabel.Text = "✓ Configuration saved successfully!"
             $StatusLabel.ForeColor = [System.Drawing.Color]::Green
         }
         
-        Write-Host "✓ Konfiguracja zapisana: $global:ConfigPath" -ForegroundColor Green
+        Write-Host "✓ Configuration saved: $global:ConfigPath" -ForegroundColor Green
     } catch {
         if ($StatusLabel) {
-            $StatusLabel.Text = "✗ Błąd zapisu: $_"
+            $StatusLabel.Text = "✗ Save error: $_"
             $StatusLabel.ForeColor = [System.Drawing.Color]::Red
         }
-        Write-Error "Błąd zapisu konfiguracji: $_"
+        Write-Error "Error saving configuration: $_"
     }
 }
 
-# === GUI KONFIGURATOR ===
+# === CONFIG GUI ===
 function Show-ConfigGUI {
-    # Zmienne do śledzenia
+    # Track controller process and temp launcher script
     $script:controllerProcess = $null
     $script:controllerConfigFile = "$env:TEMP\ControllerLauncher_Active.ps1"
     
     $script:mainForm = New-Object System.Windows.Forms.Form
-    $script:mainForm.Text = "Konfigurator Kontrolera Xbox"
+    $script:mainForm.Text = "Xbox Controller Configurator"
     $script:mainForm.Size = New-Object System.Drawing.Size(900, 950)
     $script:mainForm.StartPosition = "CenterScreen"
     $script:mainForm.FormBorderStyle = "FixedDialog"
@@ -324,7 +320,7 @@ function Show-ConfigGUI {
     $script:mainForm.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $script:mainForm.BackColor = [System.Drawing.Color]::White
     
-    # Ikona okna
+    # Window icon (try to use pwsh icon)
     try {
         $pwshPath = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
         if ($pwshPath) {
@@ -332,25 +328,25 @@ function Show-ConfigGUI {
         }
     } catch { }
 
-    # === IKONA W ZASOBNIKU SYSTEMOWYM (TRAY) ===
+    # === SYSTEM TRAY ICON ===
     $script:trayIcon = New-Object System.Windows.Forms.NotifyIcon
-    $script:trayIcon.Text = "Konfigurator Kontrolera Xbox"
-    $script:trayIcon.Visible = $true  # WAŻNE: musi być true od początku!
+    $script:trayIcon.Text = "Xbox Controller Configurator"
+    $script:trayIcon.Visible = $true
     
-    # Twórz ikonę programowo (jak w MiniWidget - działa niezawodnie)
+    # Create small icon programmatically
     $bmp = New-Object System.Drawing.Bitmap(16, 16)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = 'AntiAlias'
-    $g.Clear([System.Drawing.Color]::FromArgb(0, 120, 215))  # Niebieski kolor
+    $g.Clear([System.Drawing.Color]::FromArgb(0, 120, 215))
     $g.DrawString("X", (New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)), [System.Drawing.Brushes]::White, 1, 0)
     $g.Dispose()
     $script:trayIcon.Icon = [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
     
-    # Menu kontekstowe dla ikony tray
+    # Context menu for tray icon
     $contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
     
     $menuItemRestore = New-Object System.Windows.Forms.ToolStripMenuItem
-    $menuItemRestore.Text = "Przywróć okno"
+    $menuItemRestore.Text = "Restore Window"
     $menuItemRestore.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $menuItemRestore.Add_Click({
         $script:mainForm.Show()
@@ -364,16 +360,16 @@ function Show-ConfigGUI {
     $contextMenu.Items.Add($menuItemSeparator) | Out-Null
     
     $menuItemExit = New-Object System.Windows.Forms.ToolStripMenuItem
-    $menuItemExit.Text = "Zamknij konfigurator"
+    $menuItemExit.Text = "Close Configurator"
     $menuItemExit.Add_Click({
-        # Zamknij kontroler - zabij proces i wszystkie podprocesy
+        # Kill controller process if running
         if ($script:controllerProcess) {
             try {
                 $procId = $script:controllerProcess.Id
                 Start-Process -FilePath "taskkill" -ArgumentList "/F", "/T", "/PID", $procId -NoNewWindow -Wait -ErrorAction SilentlyContinue
             } catch { }
         }
-        # Dodatkowo zabij wszystkie procesy pwsh z tego skryptu
+        # Kill any pwsh processes running the launcher
         Get-Process pwsh -ErrorAction SilentlyContinue | Where-Object {
             try {
                 $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction SilentlyContinue).CommandLine
@@ -382,20 +378,18 @@ function Show-ConfigGUI {
         } | ForEach-Object {
             try { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } catch { }
         }
-        # Usuń temp plik
+        # Remove temp file
         $tempFile = "$env:TEMP\ControllerLauncher_Active.ps1"
         if (Test-Path $tempFile) { Remove-Item $tempFile -Force -ErrorAction SilentlyContinue }
-        # Cleanup
         $script:trayIcon.Visible = $false
         $script:trayIcon.Dispose()
-        # Całkowicie zakończ proces
         [Environment]::Exit(0)
     })
     $contextMenu.Items.Add($menuItemExit) | Out-Null
     
     $script:trayIcon.ContextMenuStrip = $contextMenu
     
-    # Podwójne kliknięcie na ikonie tray - przywróć okno
+    # Double-click tray icon to restore
     $script:trayIcon.Add_DoubleClick({
         $script:mainForm.Show()
         $script:mainForm.WindowState = [System.Windows.Forms.FormWindowState]::Normal
@@ -403,17 +397,18 @@ function Show-ConfigGUI {
         $script:mainForm.Activate()
     })
     
-    # Obsługa minimalizacji - ukryj okno (ikona tray pozostaje widoczna)
+    # Minimize -> hide to tray
     $script:mainForm.Add_Resize({
         param($sender, $e)
         if ($script:mainForm.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized) {
             $script:mainForm.Hide()
-            $script:trayIcon.ShowBalloonTip(2000, "Konfigurator kontrolera", "Kliknij dwukrotnie ikonę aby przywrócić.", [System.Windows.Forms.ToolTipIcon]::Info)
+            $script:trayIcon.ShowBalloonTip(2000, "Controller Configurator", "Double-click the icon to restore.", [System.Windows.Forms.ToolTipIcon]::Info)
         }
     })
 
+    # Sensitivity group
     $groupSensitivity = New-Object System.Windows.Forms.GroupBox
-    $groupSensitivity.Text = "⚙ CZUŁOŚĆ KONTROLERA"
+    $groupSensitivity.Text = "⚙ CONTROLLER SENSITIVITY"
     $groupSensitivity.Location = New-Object System.Drawing.Point(20, 20)
     $groupSensitivity.Size = New-Object System.Drawing.Size(840, 230)
     $groupSensitivity.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -421,7 +416,7 @@ function Show-ConfigGUI {
 
     # Cursor Speed
     $labelCursor = New-Object System.Windows.Forms.Label
-    $labelCursor.Text = "Szybkość kursora:"
+    $labelCursor.Text = "Cursor speed:"
     $labelCursor.Location = New-Object System.Drawing.Point(20, 35)
     $labelCursor.Size = New-Object System.Drawing.Size(180, 25)
     $labelCursor.Font = New-Object System.Drawing.Font("Segoe UI", 10)
@@ -451,12 +446,12 @@ function Show-ConfigGUI {
                 $script:cursorLabel.Text = $this.Value.ToString()
                 $global:Config.CursorSpeed = $this.Value
             }
-        } catch { <# ignore #> }
+        } catch { }
     })
 
     # Scroll Speed
     $labelScroll = New-Object System.Windows.Forms.Label
-    $labelScroll.Text = "Szybkość przewijania:"
+    $labelScroll.Text = "Scroll speed:"
     $labelScroll.Location = New-Object System.Drawing.Point(20, 75)
     $labelScroll.Size = New-Object System.Drawing.Size(180, 25)
     $labelScroll.Font = New-Object System.Drawing.Font("Segoe UI", 10)
@@ -486,12 +481,12 @@ function Show-ConfigGUI {
                 $script:scrollLabel.Text = $this.Value.ToString()
                 $global:Config.ScrollSpeed = $this.Value
             }
-        } catch { <# ignore #> }
+        } catch { }
     })
 
     # Deadzone
     $labelDeadzone = New-Object System.Windows.Forms.Label
-    $labelDeadzone.Text = "Martwa strefa gałek:"
+    $labelDeadzone.Text = "Stick deadzone:"
     $labelDeadzone.Location = New-Object System.Drawing.Point(20, 115)
     $labelDeadzone.Size = New-Object System.Drawing.Size(180, 25)
     $labelDeadzone.Font = New-Object System.Drawing.Font("Segoe UI", 10)
@@ -521,12 +516,12 @@ function Show-ConfigGUI {
                 $script:deadzoneLabel.Text = $this.Value.ToString()
                 $global:Config.Deadzone = $this.Value
             }
-        } catch { <# ignore #> }
+        } catch { }
     })
 
-    # Zamiana funkcji drążków
+    # Swap sticks
     $labelSwapSticks = New-Object System.Windows.Forms.Label
-    $labelSwapSticks.Text = "Funkcje drążków:"
+    $labelSwapSticks.Text = "Stick functions:"
     $labelSwapSticks.Location = New-Object System.Drawing.Point(20, 160)
     $labelSwapSticks.Size = New-Object System.Drawing.Size(180, 25)
     $labelSwapSticks.Font = New-Object System.Drawing.Font("Segoe UI", 10)
@@ -537,8 +532,8 @@ function Show-ConfigGUI {
     $comboSwapSticks.Size = New-Object System.Drawing.Size(410, 28)
     $comboSwapSticks.DropDownStyle = "DropDownList"
     $comboSwapSticks.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $comboSwapSticks.Items.Add("🕹️ Lewy drążek = KURSOR, Prawy drążek = SCROLL") | Out-Null
-    $comboSwapSticks.Items.Add("🕹️ Lewy drążek = SCROLL, Prawy drążek = KURSOR") | Out-Null
+    $comboSwapSticks.Items.Add("🕹️ Left stick = CURSOR, Right stick = SCROLL") | Out-Null
+    $comboSwapSticks.Items.Add("🕹️ Left stick = SCROLL, Right stick = CURSOR") | Out-Null
     
     if ($global:Config.SwapSticks -eq $true) {
         $comboSwapSticks.SelectedIndex = 1
@@ -552,22 +547,21 @@ function Show-ConfigGUI {
     $groupSensitivity.Controls.Add($comboSwapSticks)
 
     $labelSwapInfo = New-Object System.Windows.Forms.Label
-    $labelSwapInfo.Text = "💡 Zmień, który drążek kontroluje kursor, a który przewijanie"
+    $labelSwapInfo.Text = "💡 Change which stick controls cursor vs. scrolling"
     $labelSwapInfo.Location = New-Object System.Drawing.Point(210, 193)
     $labelSwapInfo.Size = New-Object System.Drawing.Size(600, 25)
     $labelSwapInfo.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
     $labelSwapInfo.ForeColor = [System.Drawing.Color]::Gray
     $groupSensitivity.Controls.Add($labelSwapInfo)
 
-    # === SEKCJA: PRZYCISKI ===
+    # === BUTTON MAPPINGS ===
     $groupButtons = New-Object System.Windows.Forms.GroupBox
-    $groupButtons.Text = "🎮 PRZYPISANIA PRZYCISKÓW"
+    $groupButtons.Text = "🎮 BUTTON MAPPINGS"
     $groupButtons.Location = New-Object System.Drawing.Point(20, 270)
     $groupButtons.Size = New-Object System.Drawing.Size(840, 530)
     $groupButtons.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $script:mainForm.Controls.Add($groupButtons)
 
-    # Panel z przewijaniem
     $panelButtons = New-Object System.Windows.Forms.Panel
     $panelButtons.Location = New-Object System.Drawing.Point(10, 30)
     $panelButtons.Size = New-Object System.Drawing.Size(820, 490)
@@ -575,7 +569,6 @@ function Show-ConfigGUI {
     $panelButtons.BorderStyle = "None"
     $groupButtons.Controls.Add($panelButtons)
 
-    # Funkcja pomocnicza do tworzenia przycisku z combo box
     function Add-ButtonConfig($buttonName, $displayName, $yPosition) {
         $label = New-Object System.Windows.Forms.Label
         $label.Text = "${displayName}:"
@@ -617,9 +610,9 @@ function Show-ConfigGUI {
 
     $innerYPos = 10
     
-    # Kategoria: Główne przyciski
+    # Category: Main buttons
     $labelCategory1 = New-Object System.Windows.Forms.Label
-    $labelCategory1.Text = "═══ GŁÓWNE PRZYCISKI ═══"
+    $labelCategory1.Text = "═══ MAIN BUTTONS ═══"
     $labelCategory1.Location = New-Object System.Drawing.Point(10, $innerYPos)
     $labelCategory1.Size = New-Object System.Drawing.Size(780, 25)
     $labelCategory1.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -627,14 +620,14 @@ function Show-ConfigGUI {
     $panelButtons.Controls.Add($labelCategory1)
     $innerYPos += 30
     
-    $innerYPos = Add-ButtonConfig "ButtonA" "🅰 Przycisk A" $innerYPos
-    $innerYPos = Add-ButtonConfig "ButtonB" "🅱 Przycisk B" $innerYPos
-    $innerYPos = Add-ButtonConfig "ButtonX" "🅧 Przycisk X" $innerYPos
-    $innerYPos = Add-ButtonConfig "ButtonY" "🅨 Przycisk Y" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonA" "🅰 Button A" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonB" "🅱 Button B" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonX" "🅧 Button X" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonY" "🅨 Button Y" $innerYPos
     
     $innerYPos += 10
     
-    # Kategoria: Bumpers & Triggers
+    # Category: Bumpers & Triggers
     $labelCategory2 = New-Object System.Windows.Forms.Label
     $labelCategory2.Text = "═══ BUMPERS & TRIGGERS ═══"
     $labelCategory2.Location = New-Object System.Drawing.Point(10, $innerYPos)
@@ -644,16 +637,16 @@ function Show-ConfigGUI {
     $panelButtons.Controls.Add($labelCategory2)
     $innerYPos += 30
     
-    $innerYPos = Add-ButtonConfig "ButtonLB" "LB (Lewy Bumper)" $innerYPos
-    $innerYPos = Add-ButtonConfig "ButtonRB" "RB (Prawy Bumper)" $innerYPos
-    $innerYPos = Add-ButtonConfig "LeftTrigger" "LT (Lewy Trigger)" $innerYPos
-    $innerYPos = Add-ButtonConfig "RightTrigger" "RT (Prawy Trigger)" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonLB" "LB (Left Bumper)" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonRB" "RB (Right Bumper)" $innerYPos
+    $innerYPos = Add-ButtonConfig "LeftTrigger" "LT (Left Trigger)" $innerYPos
+    $innerYPos = Add-ButtonConfig "RightTrigger" "RT (Right Trigger)" $innerYPos
     
     $innerYPos += 10
     
-    # Kategoria: Stick Clicks
+    # Sticks clicks
     $labelCategory3 = New-Object System.Windows.Forms.Label
-    $labelCategory3.Text = "═══ KLIKNIĘCIA GAŁEK ═══"
+    $labelCategory3.Text = "═══ STICK CLICKS ═══"
     $labelCategory3.Location = New-Object System.Drawing.Point(10, $innerYPos)
     $labelCategory3.Size = New-Object System.Drawing.Size(780, 25)
     $labelCategory3.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -661,14 +654,14 @@ function Show-ConfigGUI {
     $panelButtons.Controls.Add($labelCategory3)
     $innerYPos += 30
     
-    $innerYPos = Add-ButtonConfig "ButtonLStick" "L3 (Kliknięcie lewej gałki)" $innerYPos
-    $innerYPos = Add-ButtonConfig "ButtonRStick" "R3 (Kliknięcie prawej gałki)" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonLStick" "L3 (Left stick click)" $innerYPos
+    $innerYPos = Add-ButtonConfig "ButtonRStick" "R3 (Right stick click)" $innerYPos
     
     $innerYPos += 10
     
-    # Kategoria: Menu
+    # Menu buttons
     $labelCategory4 = New-Object System.Windows.Forms.Label
-    $labelCategory4.Text = "═══ PRZYCISKI MENU ═══"
+    $labelCategory4.Text = "═══ MENU BUTTONS ═══"
     $labelCategory4.Location = New-Object System.Drawing.Point(10, $innerYPos)
     $labelCategory4.Size = New-Object System.Drawing.Size(780, 25)
     $labelCategory4.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -681,9 +674,9 @@ function Show-ConfigGUI {
     
     $innerYPos += 10
     
-    # Kategoria: D-Pad
+    # D-Pad
     $labelCategory5 = New-Object System.Windows.Forms.Label
-    $labelCategory5.Text = "═══ D-PAD (KRZYŻAK) ═══"
+    $labelCategory5.Text = "═══ D-PAD ═══"
     $labelCategory5.Location = New-Object System.Drawing.Point(10, $innerYPos)
     $labelCategory5.Size = New-Object System.Drawing.Size(780, 25)
     $labelCategory5.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -691,14 +684,14 @@ function Show-ConfigGUI {
     $panelButtons.Controls.Add($labelCategory5)
     $innerYPos += 30
     
-    $innerYPos = Add-ButtonConfig "DPadUp" "⬆ D-Pad Góra" $innerYPos
-    $innerYPos = Add-ButtonConfig "DPadDown" "⬇ D-Pad Dół" $innerYPos
-    $innerYPos = Add-ButtonConfig "DPadLeft" "⬅ D-Pad Lewo" $innerYPos
-    $innerYPos = Add-ButtonConfig "DPadRight" "➡ D-Pad Prawo" $innerYPos
+    $innerYPos = Add-ButtonConfig "DPadUp" "⬆ D-Pad Up" $innerYPos
+    $innerYPos = Add-ButtonConfig "DPadDown" "⬇ D-Pad Down" $innerYPos
+    $innerYPos = Add-ButtonConfig "DPadLeft" "⬅ D-Pad Left" $innerYPos
+    $innerYPos = Add-ButtonConfig "DPadRight" "➡ D-Pad Right" $innerYPos
 
-    # === PASEK STATUSU ===
+    # STATUS LABEL
     $statusLabel = New-Object System.Windows.Forms.Label
-    $statusLabel.Text = "Gotowy. Plik konfiguracji: $global:ConfigPath"
+    $statusLabel.Text = "Ready. Config file: $global:ConfigPath"
     $statusLabel.Location = New-Object System.Drawing.Point(40, 685)
     $statusLabel.Size = New-Object System.Drawing.Size(800, 25)
     $statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
@@ -706,9 +699,9 @@ function Show-ConfigGUI {
     $statusLabel.TextAlign = "MiddleLeft"
     $script:mainForm.Controls.Add($statusLabel)
 
-    # === PRZYCISKI AKCJI ===
+    # ACTION BUTTONS
     $buttonSave = New-Object System.Windows.Forms.Button
-    $buttonSave.Text = "⏺ Zapisz konfigurację"
+    $buttonSave.Text = "💾 Save configuration"
     $buttonSave.Location = New-Object System.Drawing.Point(40, 840)
     $buttonSave.Size = New-Object System.Drawing.Size(240, 45)
     $buttonSave.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
@@ -718,29 +711,26 @@ function Show-ConfigGUI {
     $buttonSave.Cursor = [System.Windows.Forms.Cursors]::Hand
     $buttonSave.Add_Click({ 
         try {
-            # Zapisz konfigurację do pliku
             $global:Config | ConvertTo-Json | Set-Content $global:ConfigPath
             
-            # Sprawdź czy kontroler jest uruchomiony
             $controllerRunning = $script:controllerProcess -and !$script:controllerProcess.HasExited
             
             if ($controllerRunning) {
-                # Kontroler sam wykryje zmianę pliku i przeładuje ustawienia (auto-reload)
-                $statusLabel.Text = "✓ Zapisano! Kontroler automatycznie zastosuje nowe ustawienia."
+                $statusLabel.Text = "✓ Saved! Controller will auto-apply new settings."
                 $statusLabel.ForeColor = [System.Drawing.Color]::Green
             } else {
-                $statusLabel.Text = "✓ Konfiguracja zapisana! Kliknij 'Uruchom' aby włączyć kontroler."
+                $statusLabel.Text = "✓ Configuration saved! Click 'START' to run the controller."
                 $statusLabel.ForeColor = [System.Drawing.Color]::Green
             }
         } catch {
-            $statusLabel.Text = "✗ Błąd: $_"
+            $statusLabel.Text = "✗ Error: $_"
             $statusLabel.ForeColor = [System.Drawing.Color]::Red
         }
     }.GetNewClosure())
     $script:mainForm.Controls.Add($buttonSave)
 
     $buttonStart = New-Object System.Windows.Forms.Button
-    $buttonStart.Text = "▶ URUCHOM KONTROLER"
+    $buttonStart.Text = "▶ START CONTROLLER"
     $buttonStart.Location = New-Object System.Drawing.Point(300, 840)
     $buttonStart.Size = New-Object System.Drawing.Size(280, 45)
     $buttonStart.BackColor = [System.Drawing.Color]::FromArgb(16, 124, 16)
@@ -749,7 +739,7 @@ function Show-ConfigGUI {
     $buttonStart.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
     $buttonStart.Cursor = [System.Windows.Forms.Cursors]::Hand
     $buttonStart.Add_Click({
-        # Zamknij stary proces jeśli istnieje
+        # Kill old process if exists
         if ($script:controllerProcess -and !$script:controllerProcess.HasExited) {
             try {
                 $script:controllerProcess.Kill()
@@ -757,30 +747,29 @@ function Show-ConfigGUI {
             } catch { }
         }
         
-        # Zapisz konfigurację
+        # Save configuration
         $global:Config | ConvertTo-Json | Set-Content $global:ConfigPath
-        $statusLabel.Text = "✓ Konfiguracja zapisana. Uruchamiam kontroler..."
+        $statusLabel.Text = "✓ Configuration saved. Launching controller..."
         $statusLabel.ForeColor = [System.Drawing.Color]::Green
         
-        # Użyj stałej nazwy pliku (nadpisze stary)
+        # Temp launcher script path
         $tempScript = "$env:TEMP\ControllerLauncher_Active.ps1"
         
-        # Przygotuj pełny skrypt z funkcją Start-Controller
+        # Build full launcher script (embed current config path)
         $launcherScript = @'
-# Wczytaj konfigurację
-# Placeholder zostanie zastąpiony rzeczywistą ścieżką $global:ConfigPath przy zapisie
-$ConfigPath = "__CONFIG_PATH__"
-Write-Host "Szukam konfiguracji w: $ConfigPath" -ForegroundColor Cyan
-Write-Host "Plik istnieje: $(Test-Path $ConfigPath)" -ForegroundColor Cyan
+# Load configuration
+$ConfigPath = "___CONFIG_PATH___"
+Write-Host "Looking for configuration at: $ConfigPath" -ForegroundColor Cyan
+Write-Host "Config file exists: $(Test-Path $ConfigPath)" -ForegroundColor Cyan
 if (Test-Path $ConfigPath) {
     $json = Get-Content $ConfigPath -Raw | ConvertFrom-Json
     $global:Config = @{}
     foreach ($prop in $json.PSObject.Properties) {
         $global:Config[$prop.Name] = $prop.Value
     }
-    Write-Host "✓ Konfiguracja wczytana z pliku: $ConfigPath" -ForegroundColor Green
+    Write-Host "✓ Configuration loaded from file: $ConfigPath" -ForegroundColor Green
 } else {
-    Write-Host "⚠ Brak pliku konfiguracji pod: $ConfigPath, używam domyślnej" -ForegroundColor Yellow
+    Write-Host "⚠ No configuration file found at: $ConfigPath, using defaults" -ForegroundColor Yellow
     $global:Config = @{
         CursorSpeed = 8
         ScrollSpeed = 300
@@ -805,13 +794,13 @@ if (Test-Path $ConfigPath) {
     }
 }
 
-# Funkcja Start-Controller
+# Function Start-Controller
 function Start-Controller {
     Write-Host "`n╔══════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║   KONTROLER XBOX - TRYB AKTYWNY        ║" -ForegroundColor Cyan
-    Write-Host "║   Auto-reload konfiguracji co 1s       ║" -ForegroundColor Cyan
+    Write-Host "║   XBOX CONTROLLER - ACTIVE MODE         ║" -ForegroundColor Cyan
+    Write-Host "║   Auto-reload configuration every 1s    ║" -ForegroundColor Cyan
     Write-Host "╚══════════════════════════════════════════╝" -ForegroundColor Cyan
-    Write-Host "`nWciśnij przycisk przypisany do 'Exit' aby zakończyć.`n" -ForegroundColor Yellow
+    Write-Host "`nPress the button mapped to 'Exit' to stop the controller.`n" -ForegroundColor Yellow
 
 $csharpCode = @"
 using System;
@@ -853,7 +842,7 @@ namespace ControllerInput
         const byte VK_MENU = 0x12, VK_LMENU = 0xA4, VK_RMENU = 0xA5;
         const byte VK_TAB = 0x09, VK_RETURN = 0x0D, VK_ESCAPE = 0x1B, VK_DELETE = 0x2E, VK_BACK = 0x08;
         const byte VK_SPACE = 0x20, VK_INSERT = 0x2D, VK_HOME = 0x24, VK_END = 0x23;
-        const byte VK_PRIOR = 0x21, VK_NEXT = 0x22; // PageUp, PageDown
+        const byte VK_PRIOR = 0x21, VK_NEXT = 0x22;
         const byte VK_SNAPSHOT = 0x2C, VK_SCROLL = 0x91, VK_PAUSE = 0x13;
         const byte VK_CAPITAL = 0x14, VK_NUMLOCK = 0x90;
         const byte VK_F1 = 0x70, VK_F2 = 0x71, VK_F3 = 0x72, VK_F4 = 0x73, VK_F5 = 0x74, VK_F6 = 0x75;
@@ -869,11 +858,11 @@ namespace ControllerInput
         const byte VK_NUMPAD4 = 0x64, VK_NUMPAD5 = 0x65, VK_NUMPAD6 = 0x66, VK_NUMPAD7 = 0x67;
         const byte VK_NUMPAD8 = 0x68, VK_NUMPAD9 = 0x69;
         const byte VK_MULTIPLY = 0x6A, VK_ADD = 0x6B, VK_SUBTRACT = 0x6D;
-        const byte VK_DECIMAL = 0x6E, VK_DIVIDE = 0x6F, VK_SEPARATOR = 0x6C; // Numpad Enter
+        const byte VK_DECIMAL = 0x6E, VK_DIVIDE = 0x6F, VK_SEPARATOR = 0x6C;
         const byte VK_LEFT = 0x25, VK_UP = 0x26, VK_RIGHT = 0x27, VK_DOWN = 0x28;
         const byte VK_OEM_1 = 0xBA, VK_OEM_PLUS = 0xBB, VK_OEM_COMMA = 0xBC, VK_OEM_MINUS = 0xBD;
-        const byte VK_OEM_PERIOD = 0xBE, VK_OEM_2 = 0xBF, VK_OEM_3 = 0xC0; // ; = , - . / `
-        const byte VK_OEM_4 = 0xDB, VK_OEM_5 = 0xDC, VK_OEM_6 = 0xDD, VK_OEM_7 = 0xDE; // [ \ ] '
+        const byte VK_OEM_PERIOD = 0xBE, VK_OEM_2 = 0xBF, VK_OEM_3 = 0xC0;
+        const byte VK_OEM_4 = 0xDB, VK_OEM_5 = 0xDC, VK_OEM_6 = 0xDD, VK_OEM_7 = 0xDE;
         const byte VK_VOLUME_UP = 0xAF, VK_VOLUME_DOWN = 0xAE, VK_VOLUME_MUTE = 0xAD;
         const byte VK_MEDIA_PLAY = 0xB3, VK_MEDIA_NEXT = 0xB0, VK_MEDIA_PREV = 0xB1;
 
@@ -886,10 +875,9 @@ namespace ControllerInput
         public static int DEADZONE = 10000;
         public static double SPEED = 8.0;
         public static int SCROLL_SPEED = 300;
-        public static bool SWAP_STICKS = false;  // False = Lewy:Kursor/Prawy:Scroll, True = Lewy:Scroll/Prawy:Kursor
+        public static bool SWAP_STICKS = false;
         public static Dictionary<string, string> ButtonMapping = new Dictionary<string, string>();
         
-        // Auto-reload config
         public static string ConfigFilePath = "";
         static DateTime lastConfigModified = DateTime.MinValue;
         static DateTime lastConfigCheck = DateTime.MinValue;
@@ -926,11 +914,8 @@ namespace ControllerInput
             KeyUp(m1);
         }
         
-        // Sprawdza czy plik konfiguracji się zmienił i zwraca true jeśli tak
         public static bool CheckConfigChanged() {
             if (string.IsNullOrEmpty(ConfigFilePath)) return false;
-            
-            // Sprawdzaj co sekundę
             if ((DateTime.Now - lastConfigCheck).TotalSeconds < 1) return false;
             lastConfigCheck = DateTime.Now;
             
@@ -966,7 +951,6 @@ namespace ControllerInput
 
             bool was = wasPressed[idx];
 
-            // KLIKNIĘCIA MYSZY
             if (action == "LeftClick") {
                 if (pressed && !was) mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
                 else if (!pressed && was) mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
@@ -986,7 +970,6 @@ namespace ControllerInput
                 return;
             }
 
-            // ALT+TAB
             if (action == "AltTab") {
                 if (pressed && !was) {
                     if (!altHeld) { KeyDown(VK_MENU); altHeld = true; Thread.Sleep(30); }
@@ -999,7 +982,6 @@ namespace ControllerInput
                 return;
             }
 
-            // WIN+TAB
             if (action == "TaskView") {
                 if (pressed && !was) {
                     if (!winHeld) { KeyDown(VK_LWIN); winHeld = true; Thread.Sleep(30); }
@@ -1012,7 +994,6 @@ namespace ControllerInput
                 return;
             }
 
-            // POZOSTAŁE - akcje jednorazowe (TAP) i przytrzymanie (HOLD)
             if (pressed && !was) {
                 switch (action) {
                     case "DoubleClick":
@@ -1058,15 +1039,11 @@ namespace ControllerInput
                     case "SeekForward5s": Tap(VK_RIGHT); break;
                     case "BrowserBack": Combo(VK_MENU, VK_LEFT); break;
                     case "BrowserForward": Combo(VK_MENU, VK_RIGHT); break;
-                    // === KLAWISZE Z PRZYTRZYMANIEM (dla gier) ===
-                    // Space
                     case "Space": KeyDown(VK_SPACE); break;
-                    // Strzałki
                     case "Key_Up": KeyDown(VK_UP); break;
                     case "Key_Down": KeyDown(VK_DOWN); break;
                     case "Key_Left": KeyDown(VK_LEFT); break;
                     case "Key_Right": KeyDown(VK_RIGHT); break;
-                    // Cyfry
                     case "Key_0": KeyDown(VK_0); break;
                     case "Key_1": KeyDown(VK_1); break;
                     case "Key_2": KeyDown(VK_2); break;
@@ -1077,7 +1054,6 @@ namespace ControllerInput
                     case "Key_7": KeyDown(VK_7); break;
                     case "Key_8": KeyDown(VK_8); break;
                     case "Key_9": KeyDown(VK_9); break;
-                    // Litery
                     case "Key_A": KeyDown(VK_A); break;
                     case "Key_B": KeyDown(VK_B); break;
                     case "Key_C": KeyDown(VK_C); break;
@@ -1104,14 +1080,12 @@ namespace ControllerInput
                     case "Key_X": KeyDown(VK_X); break;
                     case "Key_Y": KeyDown(VK_Y); break;
                     case "Key_Z": KeyDown(VK_Z); break;
-                    // Modyfikatory
                     case "Key_LShift": KeyDown(VK_LSHIFT); break;
                     case "Key_RShift": KeyDown(VK_RSHIFT); break;
                     case "Key_LControl": KeyDown(VK_LCONTROL); break;
                     case "Key_RControl": KeyDown(VK_RCONTROL); break;
                     case "Key_LAlt": KeyDown(VK_LMENU); break;
                     case "Key_RAlt": KeyDown(VK_RMENU); break;
-                    // Klawisze funkcyjne - TAP (jednorazowe)
                     case "Key_F1": Tap(VK_F1); break;
                     case "Key_F2": Tap(VK_F2); break;
                     case "Key_F3": Tap(VK_F3); break;
@@ -1126,7 +1100,6 @@ namespace ControllerInput
                     case "Key_F12": Tap(VK_F12); break;
                     case "Key_LWin": Tap(VK_LWIN); break;
                     case "Key_RWin": Tap(VK_RWIN); break;
-                    // Klawisze specjalne - TAP
                     case "Key_Insert": Tap(VK_INSERT); break;
                     case "Key_Home": Tap(VK_HOME); break;
                     case "Key_End": Tap(VK_END); break;
@@ -1137,7 +1110,6 @@ namespace ControllerInput
                     case "Key_Pause": Tap(VK_PAUSE); break;
                     case "Key_CapsLock": Tap(VK_CAPITAL); break;
                     case "Key_NumLock": Tap(VK_NUMLOCK); break;
-                    // Numpad - przytrzymanie
                     case "Key_Numpad0": KeyDown(VK_NUMPAD0); break;
                     case "Key_Numpad1": KeyDown(VK_NUMPAD1); break;
                     case "Key_Numpad2": KeyDown(VK_NUMPAD2); break;
@@ -1154,7 +1126,6 @@ namespace ControllerInput
                     case "Key_NumpadDecimal": KeyDown(VK_DECIMAL); break;
                     case "Key_NumpadDivide": KeyDown(VK_DIVIDE); break;
                     case "Key_NumpadEnter": Tap(VK_SEPARATOR); break;
-                    // Znaki specjalne - przytrzymanie
                     case "Key_Semicolon": KeyDown(VK_OEM_1); break;
                     case "Key_Equals": KeyDown(VK_OEM_PLUS); break;
                     case "Key_Comma": KeyDown(VK_OEM_COMMA); break;
@@ -1168,17 +1139,13 @@ namespace ControllerInput
                     case "Key_Quote": KeyDown(VK_OEM_7); break;
                 }
             }
-            // Zwolnienie klawiszy przy puszczeniu przycisku (dla klawiszy z przytrzymaniem)
             else if (!pressed && was) {
                 switch (action) {
-                    // Space
                     case "Space": KeyUp(VK_SPACE); break;
-                    // Strzałki
                     case "Key_Up": KeyUp(VK_UP); break;
                     case "Key_Down": KeyUp(VK_DOWN); break;
                     case "Key_Left": KeyUp(VK_LEFT); break;
                     case "Key_Right": KeyUp(VK_RIGHT); break;
-                    // Cyfry
                     case "Key_0": KeyUp(VK_0); break;
                     case "Key_1": KeyUp(VK_1); break;
                     case "Key_2": KeyUp(VK_2); break;
@@ -1189,7 +1156,6 @@ namespace ControllerInput
                     case "Key_7": KeyUp(VK_7); break;
                     case "Key_8": KeyUp(VK_8); break;
                     case "Key_9": KeyUp(VK_9); break;
-                    // Litery
                     case "Key_A": KeyUp(VK_A); break;
                     case "Key_B": KeyUp(VK_B); break;
                     case "Key_C": KeyUp(VK_C); break;
@@ -1216,14 +1182,12 @@ namespace ControllerInput
                     case "Key_X": KeyUp(VK_X); break;
                     case "Key_Y": KeyUp(VK_Y); break;
                     case "Key_Z": KeyUp(VK_Z); break;
-                    // Modyfikatory
                     case "Key_LShift": KeyUp(VK_LSHIFT); break;
                     case "Key_RShift": KeyUp(VK_RSHIFT); break;
                     case "Key_LControl": KeyUp(VK_LCONTROL); break;
                     case "Key_RControl": KeyUp(VK_RCONTROL); break;
                     case "Key_LAlt": KeyUp(VK_LMENU); break;
                     case "Key_RAlt": KeyUp(VK_RMENU); break;
-                    // Numpad
                     case "Key_Numpad0": KeyUp(VK_NUMPAD0); break;
                     case "Key_Numpad1": KeyUp(VK_NUMPAD1); break;
                     case "Key_Numpad2": KeyUp(VK_NUMPAD2); break;
@@ -1239,7 +1203,6 @@ namespace ControllerInput
                     case "Key_NumpadSubtract": KeyUp(VK_SUBTRACT); break;
                     case "Key_NumpadDecimal": KeyUp(VK_DECIMAL); break;
                     case "Key_NumpadDivide": KeyUp(VK_DIVIDE); break;
-                    // Znaki specjalne
                     case "Key_Semicolon": KeyUp(VK_OEM_1); break;
                     case "Key_Equals": KeyUp(VK_OEM_PLUS); break;
                     case "Key_Comma": KeyUp(VK_OEM_COMMA); break;
@@ -1256,25 +1219,22 @@ namespace ControllerInput
             wasPressed[idx] = pressed;
         }
 
-        // Zwraca: 0 = exit, 1 = reload config
         public static int Run()
         {
             XINPUT_STATE state = new XINPUT_STATE();
-            Console.WriteLine("Kontroler aktywny! (auto-reload co 1s)");
+            Console.WriteLine("Controller active! (auto-reload every 1s)");
 
             while (true)
             {
-                // Sprawdź czy plik konfiguracji się zmienił
                 if (CheckConfigChanged()) {
-                    Console.WriteLine(">>> Wykryto zmianę konfiguracji - przeładowuję...");
-                    return 1; // reload
+                    Console.WriteLine(">>> Configuration change detected - reloading...");
+                    return 1;
                 }
                 
                 if (XInputGetState(0, ref state) != 0) { Thread.Sleep(500); continue; }
                 
                 ushort btns = state.Gamepad.wButtons;
 
-                // Exit
                 string exitBtn = "";
                 foreach (var kv in ButtonMapping) if (kv.Value == "Exit") { exitBtn = kv.Key; break; }
                 
@@ -1287,32 +1247,26 @@ namespace ControllerInput
                 if (exitBtn == "ButtonBack" && (btns & BTN_BACK) != 0) shouldExit = true;
                 if (shouldExit) break;
 
-                // TRYB PRECYZYJNY/SZYBKI - RT zwalnia kursor 4x, LT przyspiesza 1.5x
                 bool rtPressed = state.Gamepad.bRightTrigger > 100;
                 bool ltPressed = state.Gamepad.bLeftTrigger > 100;
                 double currentSpeed = SPEED;
-                if (rtPressed) currentSpeed = SPEED * 0.25;      // Precyzyjny - 4x wolniej
-                else if (ltPressed) currentSpeed = SPEED * 2.5;  // Szybki - 2.5x szybciej
+                if (rtPressed) currentSpeed = SPEED * 0.25;
+                else if (ltPressed) currentSpeed = SPEED * 2.5;
 
-                // POBIERZ WARTOŚCI DRĄŻKÓW
                 double lx = state.Gamepad.sThumbLX, ly = state.Gamepad.sThumbLY;
                 double rx = state.Gamepad.sThumbRX, ry = state.Gamepad.sThumbRY;
                 
-                // ZAMIANA DRĄŻKÓW (jeśli włączona)
                 double cursorX, cursorY, scrollY;
                 if (SWAP_STICKS) {
-                    // Lewy = Scroll, Prawy = Kursor
                     cursorX = rx;
                     cursorY = ry;
                     scrollY = ly;
                 } else {
-                    // Lewy = Kursor, Prawy = Scroll (domyślnie)
                     cursorX = lx;
                     cursorY = ly;
                     scrollY = ry;
                 }
                 
-                // KURSOR
                 bool joystickMoving = Math.Abs(cursorX) > DEADZONE || Math.Abs(cursorY) > DEADZONE;
                 
                 if (Math.Abs(cursorX) <= DEADZONE) { accX = 0; cursorX = 0; }
@@ -1329,14 +1283,12 @@ namespace ControllerInput
                     }
                 }
 
-                // SCROLL (RT = precyzyjny scroll 10x wolniej)
                 if (Math.Abs(scrollY) > DEADZONE) {
                     int currentScrollSpeed = rtPressed ? SCROLL_SPEED * 10 : SCROLL_SPEED;
                     int scroll = (int)(scrollY / currentScrollSpeed);
                     if (scroll != 0) mouse_event(MOUSEEVENTF_WHEEL, 0, 0, scroll, 0);
                 }
 
-                // PRZYCISKI - A i B działają jak normalna myszka
                 DoAction(GetAction("ButtonA"), 0, (btns & BTN_A) != 0);
                 DoAction(GetAction("ButtonB"), 1, (btns & BTN_B) != 0);
                 DoAction(GetAction("ButtonX"), 2, (btns & BTN_X) != 0);
@@ -1351,9 +1303,7 @@ namespace ControllerInput
                 DoAction(GetAction("DPadDown"), 11, (btns & DPAD_DOWN) != 0);
                 DoAction(GetAction("DPadLeft"), 12, (btns & DPAD_LEFT) != 0);
                 DoAction(GetAction("DPadRight"), 13, (btns & DPAD_RIGHT) != 0);
-                // LT - nie wykonuj akcji gdy joystick się rusza (tryb szybki)
                 DoAction(GetAction("LeftTrigger"), 14, ltPressed && !joystickMoving);
-                // RT - nie wykonuj akcji gdy joystick się rusza (tryb precyzyjny)
                 DoAction(GetAction("RightTrigger"), 15, rtPressed && !joystickMoving);
 
                 Thread.Sleep(10);
@@ -1361,8 +1311,8 @@ namespace ControllerInput
             
             if (altHeld) KeyUp(VK_MENU);
             if (winHeld) KeyUp(VK_LWIN);
-            Console.WriteLine("Kontroler zatrzymany.");
-            return 0; // exit
+            Console.WriteLine("Controller stopped.");
+            return 0;
         }
     }
 }
@@ -1373,16 +1323,14 @@ namespace ControllerInput
             Add-Type -TypeDefinition $csharpCode -Language CSharp 
         }
         catch { 
-            Write-Error "Błąd kompilacji kontrolera: $_"
-            Read-Host "`nNaciśnij Enter aby zakończyć"
+            Write-Error "Controller compilation error: $_"
+            Read-Host "`nPress Enter to exit"
             return
         }
     }
 
-    # Ustaw ścieżkę pliku konfiguracji dla auto-reload
     [ControllerInput.Gamepad]::ConfigFilePath = $ConfigPath
     
-    # Funkcja ładująca konfigurację
     function Load-ControllerConfig {
         if (Test-Path $ConfigPath) {
             $json = Get-Content $ConfigPath -Raw | ConvertFrom-Json
@@ -1405,63 +1353,57 @@ namespace ControllerInput
         }
         
         [ControllerInput.Gamepad]::UpdateLastModified()
-        Write-Host "Konfiguracja załadowana:" -ForegroundColor Yellow
-        Write-Host "  • Szybkość kursora: $($global:Config.CursorSpeed)" -ForegroundColor Gray
-        Write-Host "  • Szybkość scroll: $($global:Config.ScrollSpeed)" -ForegroundColor Gray
+        Write-Host "Configuration loaded:" -ForegroundColor Yellow
+        Write-Host "  • Cursor speed: $($global:Config.CursorSpeed)" -ForegroundColor Gray
+        Write-Host "  • Scroll speed: $($global:Config.ScrollSpeed)" -ForegroundColor Gray
         if ($global:Config.SwapSticks) {
-            Write-Host "  • Drążki: Lewy=SCROLL | Prawy=KURSOR" -ForegroundColor Cyan
+            Write-Host "  • Sticks: Left=SCROLL | Right=CURSOR" -ForegroundColor Cyan
         } else {
-            Write-Host "  • Drążki: Lewy=KURSOR | Prawy=SCROLL" -ForegroundColor Cyan
+            Write-Host "  • Sticks: Left=CURSOR | Right=SCROLL" -ForegroundColor Cyan
         }
     }
     
-    # Załaduj początkową konfigurację
     Load-ControllerConfig
     
-    # Pętla główna z auto-reload
     $running = $true
     while ($running) {
         try {
             $result = [ControllerInput.Gamepad]::Run()
             if ($result -eq 1) {
-                # Reload - przeładuj konfigurację i kontynuuj
-                Write-Host "`n>>> Przeładowuję konfigurację..." -ForegroundColor Cyan
+                Write-Host "`n>>> Reloading configuration..." -ForegroundColor Cyan
                 Load-ControllerConfig
-                Write-Host ">>> Konfiguracja przeładowana! Kontroler działa dalej.`n" -ForegroundColor Green
+                Write-Host ">>> Configuration reloaded! Controller continues.`n" -ForegroundColor Green
             } else {
-                # Exit
                 $running = $false
             }
         }
         catch {
-            Write-Error "Błąd podczas działania kontrolera: $_"
+            Write-Error "Controller runtime error: $_"
             $running = $false
         }
     }
 
-    Write-Host "`nKontroler zakończył działanie." -ForegroundColor Yellow
+Write-Host "`nController exited." -ForegroundColor Yellow
 }
 
-# Uruchom kontroler
 Start-Controller
-'@
-        
-        # Podmień placeholder na rzeczywistą ścieżkę konfiguracji
-        $launcherScript = $launcherScript -replace '__CONFIG_PATH__', $global:ConfigPath
 
-        # Zapisz launcher script (ścieżka już jest poprawna)
-        $launcherScript | Set-Content $tempScript -Encoding UTF8
-        
-        # Uruchom w tle (bez widocznego okna)
-        $script:controllerProcess = Start-Process pwsh -ArgumentList "-WindowStyle", "Hidden", "-File", "`"$tempScript`"" -PassThru -WindowStyle Hidden
-        
-        $statusLabel.Text = "🎮 Kontroler uruchomiony! Zmiany ustawień będą automatycznie stosowane po zapisie."
-        $statusLabel.ForeColor = [System.Drawing.Color]::Green
+# End of launcher script
+'@
+
+$launcherScript = $launcherScript.Replace('___CONFIG_PATH___', $global:ConfigPath)
+
+# Save launcher to temp and run
+$launcherScript | Set-Content $tempScript -Encoding UTF8
+$script:controllerProcess = Start-Process pwsh -ArgumentList "-WindowStyle", "Hidden", "-File", "`"$tempScript`"" -PassThru -WindowStyle Hidden
+
+$statusLabel.Text = "🎮 Controller started! Settings will be auto-applied after save."
+$statusLabel.ForeColor = [System.Drawing.Color]::Green
     }.GetNewClosure())
     $script:mainForm.Controls.Add($buttonStart)
 
     $buttonExit = New-Object System.Windows.Forms.Button
-    $buttonExit.Text = "✖ Zamknij"
+    $buttonExit.Text = "✖ Close"
     $buttonExit.Location = New-Object System.Drawing.Point(600, 840)
     $buttonExit.Size = New-Object System.Drawing.Size(240, 45)
     $buttonExit.BackColor = [System.Drawing.Color]::FromArgb(232, 17, 35)
@@ -1470,15 +1412,12 @@ Start-Controller
     $buttonExit.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
     $buttonExit.Cursor = [System.Windows.Forms.Cursors]::Hand
     $buttonExit.Add_Click({ 
-        # Zamknij kontroler - zabij proces i wszystkie podprocesy
         if ($script:controllerProcess) {
             try {
                 $procId = $script:controllerProcess.Id
-                # Zabij drzewo procesów (proces i wszystkie jego dzieci)
                 Start-Process -FilePath "taskkill" -ArgumentList "/F", "/T", "/PID", $procId -NoNewWindow -Wait -ErrorAction SilentlyContinue
             } catch { }
         }
-        # Dodatkowo zabij wszystkie procesy pwsh uruchomione z tego skryptu temp
         Get-Process pwsh -ErrorAction SilentlyContinue | Where-Object {
             try {
                 $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction SilentlyContinue).CommandLine
@@ -1487,29 +1426,23 @@ Start-Controller
         } | ForEach-Object {
             try { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } catch { }
         }
-        # Usuń temp plik
         $tempFile = "$env:TEMP\ControllerLauncher_Active.ps1"
         if (Test-Path $tempFile) { Remove-Item $tempFile -Force -ErrorAction SilentlyContinue }
-        # Cleanup
         $script:trayIcon.Visible = $false
         $script:trayIcon.Dispose()
-        # Całkowicie zakończ proces
         [Environment]::Exit(0)
     }.GetNewClosure())
     $script:mainForm.Controls.Add($buttonExit)
 
-    # Obsługa zamknięcia formularza
     $script:mainForm.Add_FormClosing({
         param($formSender, $formEvent)
         
-        # Zamknij kontroler - zabij proces i wszystkie podprocesy
         if ($script:controllerProcess) {
             try {
                 $procId = $script:controllerProcess.Id
                 Start-Process -FilePath "taskkill" -ArgumentList "/F", "/T", "/PID", $procId -NoNewWindow -Wait -ErrorAction SilentlyContinue
             } catch { }
         }
-        # Dodatkowo zabij wszystkie procesy pwsh z tego skryptu
         Get-Process pwsh -ErrorAction SilentlyContinue | Where-Object {
             try {
                 $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction SilentlyContinue).CommandLine
@@ -1519,7 +1452,6 @@ Start-Controller
             try { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } catch { }
         }
         
-        # Usuń tymczasowy plik
         $tempFile = "$env:TEMP\ControllerLauncher_Active.ps1"
         if (Test-Path $tempFile) {
             Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
@@ -1528,14 +1460,11 @@ Start-Controller
         $script:trayIcon.Visible = $false
         $script:trayIcon.Dispose()
         
-        # Całkowicie zakończ proces PowerShell
         [Environment]::Exit(0)
     })
 
-    # Użyj Application.Run zamiast ShowDialog - prawidłowo obsługuje NotifyIcon
     [System.Windows.Forms.Application]::Run($script:mainForm)
     
-    # Czyszczenie zasobów
     $script:cursorLabel = $null
     $script:scrollLabel = $null
     $script:deadzoneLabel = $null
@@ -1545,23 +1474,22 @@ Start-Controller
     } catch { }
 }
 
-# === GŁÓWNY PUNKT WEJŚCIA ===
+# === MAIN ENTRY ===
 Clear-Host
 Write-Host @"
 ╔═══════════════════════════════════════════════════════╗
 ║                                                       ║
-║    🎮  KONTROLER XBOX - KONFIGURATOR PRO  🎮          ║
+║    🎮  XBOX CONTROLLER - CONFIGURATOR PRO  🎮         ║
 ║                                                       ║
-║    Sterowanie myszką i klawiaturą za pomocą           ║
-║    kontrolera Xbox z pełną konfiguracją GUI           ║
+║    Control mouse and keyboard with an Xbox controller ║
+║    Full GUI configurator                              ║
 ║                                                       ║
 ╚═══════════════════════════════════════════════════════╝
 "@ -ForegroundColor Cyan
 
-Write-Host "`nŁadowanie..." -ForegroundColor Yellow
+Write-Host "`nLoading..." -ForegroundColor Yellow
 Load-Config
 
-# Uruchomienie GUI
 Show-ConfigGUI
 
-Write-Host "`nDo zobaczenia!" -ForegroundColor Cyan
+Write-Host "`nSee you!" -ForegroundColor Cyan

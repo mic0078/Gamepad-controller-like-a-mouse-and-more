@@ -38,8 +38,46 @@ $global:Config = @{
 }
 
 # === CONFIG PATH (use script folder for portability) ===
-$global:ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Use $PSCommandPath when run from file, otherwise try $PSScriptRoot or MyInvocation
+if ($PSCommandPath) {
+    $global:ScriptDir = Split-Path -Parent $PSCommandPath
+} elseif ($PSScriptRoot) {
+    $global:ScriptDir = $PSScriptRoot
+} else {
+    $global:ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+}
+# Default config path (may be overridden by optional installer block below)
 $global:ConfigPath = Join-Path $global:ScriptDir 'ControllerConfig.json'
+
+# === OPTIONAL INSTALL TO A FIXED DIRECTORY ===
+# If user wants, the script will create an install folder and copy itself there,
+# and the config file will be stored in that folder.
+$installDir = "C:\Controller_Configurator"
+try {
+    if (-not (Test-Path $installDir)) {
+        New-Item -Path $installDir -ItemType Directory -Force | Out-Null
+        Write-Host "ℹ Created install directory: $installDir" -ForegroundColor Cyan
+    }
+
+    if ($PSCommandPath) { $currentScriptFile = $PSCommandPath } else { $currentScriptFile = $MyInvocation.MyCommand.Definition }
+    $destScript = Join-Path $installDir (Split-Path -Leaf $currentScriptFile)
+
+    if ($currentScriptFile -and ($currentScriptFile -ne $destScript)) {
+        try {
+            Copy-Item -Path $currentScriptFile -Destination $destScript -Force -ErrorAction Stop
+            Write-Host "ℹ Copied script to: $destScript" -ForegroundColor Cyan
+        } catch {
+            Write-Host "⚠ Failed to copy script to ${installDir}:" -ForegroundColor Yellow
+            Write-Host $_ -ForegroundColor Yellow
+        }
+    }
+
+    # Store config in install dir (override)
+    $global:ScriptDir = $installDir
+    $global:ConfigPath = Join-Path $global:ScriptDir 'ControllerConfig.json'
+} catch {
+    Write-Host "✗ Error preparing install directory: $_" -ForegroundColor Red
+}
 
 # === AVAILABLE ACTIONS FOR BUTTON ASSIGNMENT ===
 $global:AvailableFunctions = [ordered]@{
@@ -229,9 +267,18 @@ function Load-Config {
             foreach ($key in $json.PSObject.Properties.Name) {
                 $global:Config[$key] = $json.$key
             }
-            Write-Host "✓ Configuration loaded" -ForegroundColor Green
+            Write-Host "✓ Configuration loaded: $global:ConfigPath" -ForegroundColor Green
         } catch {
             Write-Host "⚠ Error loading configuration, using defaults" -ForegroundColor Yellow
+        }
+    }
+    else {
+        # If config file doesn't exist - create it immediately with defaults
+        try {
+            $global:Config | ConvertTo-Json | Set-Content -Path $global:ConfigPath -Encoding UTF8
+            Write-Host "ℹ Created default configuration file: $global:ConfigPath" -ForegroundColor Cyan
+        } catch {
+            Write-Host "✗ Failed to create configuration file: $global:ConfigPath`n  $_" -ForegroundColor Red
         }
     }
 }
@@ -644,7 +691,7 @@ function Show-ConfigGUI {
 
     # STATUS LABEL
     $statusLabel = New-Object System.Windows.Forms.Label
-    $statusLabel.Text = "Ready. Configure buttons and save."
+    $statusLabel.Text = "Ready. Config file: $global:ConfigPath"
     $statusLabel.Location = New-Object System.Drawing.Point(40, 685)
     $statusLabel.Size = New-Object System.Drawing.Size(800, 25)
     $statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
