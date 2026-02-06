@@ -37,9 +37,49 @@ $global:Config = @{
     RightTrigger = "None"
 }
 
-# === ŚCIEŻKA KONFIGURACJI (zakodowana na sztywno) ===
-$global:ScriptDir = "C:\Users\Michal\Desktop\Kontroler jako myszka z GUI"
-$global:ConfigPath = "C:\Users\Michal\Desktop\Kontroler jako myszka z GUI\ControllerConfig.json"
+# === ŚCIEŻKA KONFIGURACJI (użyj ścieżki skryptu) ===
+# Użyj $PSScriptRoot gdy skrypt jest uruchamiany z pliku, w przeciwnym razie wyciągnij ścieżkę z MyInvocation
+if ($PSCommandPath) {
+    $global:ScriptDir = Split-Path -Parent $PSCommandPath
+} elseif ($PSScriptRoot) {
+    $global:ScriptDir = $PSScriptRoot
+} else {
+    $global:ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+}
+# Ustaw ścieżkę do pliku konfiguracji w katalogu, z którego pochodzi skrypt
+$global:ConfigPath = Join-Path $global:ScriptDir "ControllerConfig.json"
+
+# === OPCJONALNA INSTALACJA DO STAŁEGO KATALOGU ===
+# Jeśli użytkownik chce, skrypt utworzy folder instalacyjny i skopiuje sam siebie tam,
+# a plik konfiguracji będzie zapisywany w tym katalogu.
+$installDir = "C:\Controller_Configurator"
+try {
+    if (-not (Test-Path $installDir)) {
+        New-Item -Path $installDir -ItemType Directory -Force | Out-Null
+        Write-Host "ℹ Utworzono katalog instalacyjny: $installDir" -ForegroundColor Cyan
+    }
+
+    # Ścieżka do aktualnego pliku skryptu
+    if ($PSCommandPath) { $currentScriptFile = $PSCommandPath } else { $currentScriptFile = $MyInvocation.MyCommand.Definition }
+    $destScript = Join-Path $installDir (Split-Path -Leaf $currentScriptFile)
+
+    if ($currentScriptFile -and ($currentScriptFile -ne $destScript)) {
+        try {
+            Copy-Item -Path $currentScriptFile -Destination $destScript -Force -ErrorAction Stop
+            Write-Host "ℹ Skopiowano skrypt do: $destScript" -ForegroundColor Cyan
+        } catch {
+            # Użyj ${installDir} aby uniknąć problemów z interpolacją i wypisz wyjątek jako osobny argument
+            Write-Host "⚠ Nie udało się skopiować skryptu do ${installDir}:" -ForegroundColor Yellow
+            Write-Host $_ -ForegroundColor Yellow
+        }
+    }
+
+    # Zapisuj konfigurację w katalogu instalacyjnym (nadpisze wcześniejsze ustawienie)
+    $global:ScriptDir = $installDir
+    $global:ConfigPath = Join-Path $global:ScriptDir "ControllerConfig.json"
+} catch {
+    Write-Host "✗ Błąd podczas przygotowywania katalogu instalacyjnego: $_" -ForegroundColor Red
+}
 
 # === FUNKCJE WINDOWS DOSTĘPNE DO PRZYPISANIA ===
 $global:AvailableFunctions = [ordered]@{
@@ -230,9 +270,19 @@ function Load-Config {
             foreach ($key in $json.PSObject.Properties.Name) {
                 $global:Config[$key] = $json.$key
             }
-            Write-Host "✓ Konfiguracja wczytana" -ForegroundColor Green
-        } catch {
+            Write-Host "✓ Konfiguracja wczytana: $global:ConfigPath" -ForegroundColor Green
+        }
+        catch {
             Write-Host "⚠ Błąd wczytywania konfiguracji, używam domyślnej" -ForegroundColor Yellow
+        }
+    }
+    else {
+        # Jeśli plik nie istnieje — utwórz go od razu z domyślną konfiguracją
+        try {
+            $global:Config | ConvertTo-Json | Set-Content -Path $global:ConfigPath -Encoding UTF8
+            Write-Host "ℹ Utworzono domyślny plik konfiguracji: $global:ConfigPath" -ForegroundColor Cyan
+        } catch {
+            Write-Host "✗ Nie udało się utworzyć pliku konfiguracji: $global:ConfigPath`n  $_" -ForegroundColor Red
         }
     }
 }
@@ -648,7 +698,7 @@ function Show-ConfigGUI {
 
     # === PASEK STATUSU ===
     $statusLabel = New-Object System.Windows.Forms.Label
-    $statusLabel.Text = "Gotowy. Skonfiguruj przyciski i zapisz."
+    $statusLabel.Text = "Gotowy. Plik konfiguracji: $global:ConfigPath"
     $statusLabel.Location = New-Object System.Drawing.Point(40, 685)
     $statusLabel.Size = New-Object System.Drawing.Size(800, 25)
     $statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
@@ -658,7 +708,7 @@ function Show-ConfigGUI {
 
     # === PRZYCISKI AKCJI ===
     $buttonSave = New-Object System.Windows.Forms.Button
-    $buttonSave.Text = "💾 Zapisz konfigurację"
+    $buttonSave.Text = "⏺ Zapisz konfigurację"
     $buttonSave.Location = New-Object System.Drawing.Point(40, 840)
     $buttonSave.Size = New-Object System.Drawing.Size(240, 45)
     $buttonSave.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
@@ -718,7 +768,8 @@ function Show-ConfigGUI {
         # Przygotuj pełny skrypt z funkcją Start-Controller
         $launcherScript = @'
 # Wczytaj konfigurację
-$ConfigPath = "C:\Users\Michal\Desktop\Kontroler jako myszka z GUI\ControllerConfig.json"
+# Placeholder zostanie zastąpiony rzeczywistą ścieżką $global:ConfigPath przy zapisie
+$ConfigPath = "__CONFIG_PATH__"
 Write-Host "Szukam konfiguracji w: $ConfigPath" -ForegroundColor Cyan
 Write-Host "Plik istnieje: $(Test-Path $ConfigPath)" -ForegroundColor Cyan
 if (Test-Path $ConfigPath) {
@@ -1395,6 +1446,9 @@ namespace ControllerInput
 Start-Controller
 '@
         
+        # Podmień placeholder na rzeczywistą ścieżkę konfiguracji
+        $launcherScript = $launcherScript -replace '__CONFIG_PATH__', $global:ConfigPath
+
         # Zapisz launcher script (ścieżka już jest poprawna)
         $launcherScript | Set-Content $tempScript -Encoding UTF8
         
