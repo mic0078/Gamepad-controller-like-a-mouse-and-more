@@ -701,7 +701,7 @@ function Show-ConfigGUI {
 
     # ACTION BUTTONS
     $buttonSave = New-Object System.Windows.Forms.Button
-    $buttonSave.Text = "💾 Save configuration"
+    $buttonSave.Text = "⏺ Save configuration"
     $buttonSave.Location = New-Object System.Drawing.Point(40, 840)
     $buttonSave.Size = New-Object System.Drawing.Size(240, 45)
     $buttonSave.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
