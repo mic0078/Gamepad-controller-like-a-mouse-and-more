@@ -1434,6 +1434,26 @@ $statusLabel.ForeColor = [System.Drawing.Color]::Green
     }.GetNewClosure())
     $script:mainForm.Controls.Add($buttonExit)
 
+    $script:mainForm.Add_Resize({
+        if ($script:mainForm.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized) {
+            $script:mainForm.Hide()
+            $script:mainForm.ShowInTaskbar = $false
+        }
+    })
+
+    $script:trayIcon.Add_MouseClick({
+        if ($script:mainForm.Visible -eq $false) {
+            $script:mainForm.Show()
+            $script:mainForm.ShowInTaskbar = $true
+            $script:mainForm.WindowState = [System.Windows.Forms.FormWindowState]::Normal
+            $script:mainForm.BringToFront()
+            $script:mainForm.Focus()
+        } else {
+            $script:mainForm.Hide()
+            $script:mainForm.ShowInTaskbar = $false
+        }
+    })
+
     $script:mainForm.Add_FormClosing({
         param($formSender, $formEvent)
         

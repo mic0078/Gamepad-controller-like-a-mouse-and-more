@@ -350,6 +350,7 @@ function Show-ConfigGUI {
     $menuItemRestore.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $menuItemRestore.Add_Click({
         $script:mainForm.Show()
+        $script:mainForm.ShowInTaskbar = $true
         $script:mainForm.WindowState = [System.Windows.Forms.FormWindowState]::Normal
         $script:mainForm.BringToFront()
         $script:mainForm.Activate()
@@ -392,16 +393,19 @@ function Show-ConfigGUI {
     # Double-click tray icon to restore
     $script:trayIcon.Add_DoubleClick({
         $script:mainForm.Show()
+        $script:mainForm.ShowInTaskbar = $true
         $script:mainForm.WindowState = [System.Windows.Forms.FormWindowState]::Normal
         $script:mainForm.BringToFront()
         $script:mainForm.Activate()
     })
     
-    # Minimize -> hide to tray
+    # Minimize -> hide to tray (DONT use .Hide() - use Opacity instead to keep message loop running)
     $script:mainForm.Add_Resize({
         param($sender, $e)
         if ($script:mainForm.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized) {
-            $script:mainForm.Hide()
+            $script:mainForm.ShowInTaskbar = $false
+            $script:mainForm.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+            $script:mainForm.Visible = $false
             $script:trayIcon.ShowBalloonTip(2000, "Controller Configurator", "Double-click the icon to restore.", [System.Windows.Forms.ToolTipIcon]::Info)
         }
     })
